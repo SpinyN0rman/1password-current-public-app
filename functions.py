@@ -88,11 +88,7 @@ def edge_stable_api():
         response_json = response.json()
         version = response_json['version']
         success_time = datetime.now().timestamp()
-        fail_time = ""
-        error_msg = ""
     except Exception as e:
-        version = ""
-        success_time = ""
         fail_time = datetime.now().timestamp()
         error_msg = e
     conn = st.connection('versions_db', type='sql')
@@ -114,6 +110,27 @@ def chrome_stable_scrape():
     url = 'https://chromewebstore.google.com/detail/1password-%E2%80%93-password-mana/aeblfdkhhhdcdjpifhhbdiojplfjncoa'
     response = requests.get(url)
     soup = BeautifulSoup(response.content, 'html.parser')
+
+    version_element = soup.find(string="Version")
+    if version_element:
+        # The version number appears right *after* that text
+        version_text = version_element.find_next().get_text(strip=True)
+        conn = st.connection('versions_db', type='sql')
+        if version_text:
+            success_time = datetime.now().timestamp()
+            with conn.session as s:
+                s.execute(text(
+                    "UPDATE versions SET version = :chrome_version, success_check = :chrome_success WHERE id = :chrome_stable;"),
+                    {"chrome_version": version_text, "chrome_success": success_time, "chrome_stable": "chrome_stable"}, )
+                s.commit()
+        else:
+            fail_time = datetime.now().timestamp()
+            error_msg = "Scrape failed."
+            with conn.session as s:
+                s.execute(text(
+                    "UPDATE versions SET fail_check = :chrome_fail, error_message = :chrome_error WHERE id = :chrome_stable;"),
+                    {"chrome_fail": fail_time, "chrome_error": error_msg, "chrome_stable": "chrome_stable"}, )
+                s.commit()
     return
 
 

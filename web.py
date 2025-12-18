@@ -11,6 +11,7 @@ func.init_db()
 perform_scrape = func.should_we_scrape()
 if perform_scrape:
     func.edge_stable_api()
+    func.chrome_stable_scrape()
 
 # Fetches a dictionary from the database
 versions_dict = func.db_dict()
@@ -30,7 +31,10 @@ for index, col in enumerate(cols):
             st.write(f"{fail_indicator}")
         st.caption(f"*{versions_dict[index]['channel']}*")
         st.write(f"**Version: `{versions_dict[index]['version']}`**")
-        st.write(f"*Last successful check: **{func.format_datetime(versions_dict[index]['success_check'])}***")
+        if versions_dict[index]['success_check'] == "0":
+            st.write("*Not checking yet*")
+        else:
+            st.write(f"*Last successful check: **{func.format_datetime(versions_dict[index]['success_check'])}***")
         if versions_dict[index]['fail_check'] > versions_dict[index]['success_check']:
             st.write(f"*Last failed check: **{versions_dict[index]['fail_check']}** "
                      f"with error message: **{versions_dict[index]['error_message']}***")
