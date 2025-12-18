@@ -65,11 +65,12 @@ def should_we_scrape():
     versions = conn.query('select * from versions')
     versions_dict = to_dict(versions, orient='index')
 
-    next_check = datetime.now() + timedelta(hours=1)
-    next_check_epoch = next_check.timestamp()
+    current_epoch = datetime.now().timestamp()
 
     for index, version in enumerate(versions_dict):
-        if float(versions_dict[index]['success_check']) > next_check_epoch or float(versions_dict[index]['fail_check']) > next_check_epoch:
+        success_next_check = float(versions_dict[index]['success_check']) + 3600
+        fail_next_check = float(versions_dict[index]['fail_check']) + 3600
+        if current_epoch > success_next_check or current_epoch > fail_next_check:
             return True
 
     return False
