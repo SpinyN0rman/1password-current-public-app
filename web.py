@@ -12,6 +12,9 @@ perform_scrape = func.should_we_scrape()
 if perform_scrape:
     func.edge_stable_api()
     func.chrome_stable_scrape()
+    # Now clear Streamlit's caches
+    st.cache_data.clear()
+    st.cache_resource.clear()
 
 # Fetches a dictionary from the database
 versions_dict = func.db_dict()
