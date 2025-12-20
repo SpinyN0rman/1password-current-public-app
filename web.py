@@ -27,17 +27,13 @@ for index, col in enumerate(cols):
             fail_indicator = "🟢"
         else:
             fail_indicator = "🔴"
-        title1, title2 = st.columns([0.9,0.1], vertical_alignment="center")
-        with title1:
-            st.subheader(f"{versions_dict[index]['browser']}")
-        with title2:
-            st.write(f"{fail_indicator}")
+        st.subheader(f"{versions_dict[index]['browser']}")
         st.caption(f"*{versions_dict[index]['channel']}*")
         st.write(f"**Version: `{versions_dict[index]['version']}`**")
         if versions_dict[index]['success_check'] == "0":
             st.write("*Not checking yet*")
         else:
-            st.write(f"*Last successful check: **{func.format_datetime(versions_dict[index]['success_check'])}***")
+            st.write(f"{fail_indicator} *Last successful check: **{func.format_datetime(versions_dict[index]['success_check'])}***")
         if versions_dict[index]['fail_check'] > versions_dict[index]['success_check']:
             st.write(f"*Last failed check: **{versions_dict[index]['fail_check']}** "
                      f"with error message: **{versions_dict[index]['error_message']}***")
