@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import streamlit as st
 from sqlalchemy import text
 from pandas.core.methods.to_dict import to_dict
+import json
 
 @st.cache_data(ttl=60)
 def init_db():
@@ -70,7 +71,9 @@ def should_we_scrape():
     for index, version in enumerate(versions_dict):
         success_next_check = float(versions_dict[index]['success_check']) + 3600
         fail_next_check = float(versions_dict[index]['fail_check']) + 3600
-        if current_epoch > success_next_check or current_epoch > fail_next_check:
+        # We only want to use the latest timestamp
+        next_check = max(success_next_check, fail_next_check)
+        if current_epoch > next_check:
             return True
 
     return False
@@ -83,6 +86,8 @@ def format_datetime(date_time):
 
 def edge_stable_api():
     url = 'https://microsoftedge.microsoft.com/addons/getproductdetailsbycrxid/dppgmdbiimibapkepcbdbmkaabgiofem?hl=en-US'
+    success_time = False
+    fail_time = False
     try:
         response = requests.get(url)
         response_json = response.json()
@@ -133,13 +138,124 @@ def chrome_stable_scrape():
                 s.commit()
     return
 
+def firefox_stable_scrape():
+    url = 'https://addons.mozilla.org/api/v5/addons/addon/1password-x-password-manager/'
+    success_time = False
+    fail_time = False
+    try:
+        response = requests.get(url)
+        response_json = response.json()
+        version = response_json['current_version']['version']
+        success_time = datetime.now().timestamp()
+    except Exception as e:
+        fail_time = datetime.now().timestamp()
+        error_msg = e
+    conn = st.connection('versions_db', type='sql')
+    if success_time:
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET version = :firefox_version, success_check = :firefox_success WHERE id = :firefox_stable;"),
+                {"firefox_version": version, "firefox_success": success_time,
+                 "firefox_stable": "firefox_stable"}, )
+            s.commit()
+    elif fail_time:
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET fail_check = :firefox_fail, error_message = :firefox_error WHERE id = :firefox_stable;"),
+                {"firefox_fail": fail_time, "firefox_error": error_msg, "firefox_stable": "firefox_stable"}, )
+            s.commit()
+    return
+
+def safari_stable_scrape():
+    url = 'https://itunes.apple.com/lookup?id=1569813296'
+    success_time = False
+    fail_time = False
+    try:
+        response = requests.get(url)
+        response_json = response.json()
+        version = response_json['results'][0]['version']
+        success_time = datetime.now().timestamp()
+    except Exception as e:
+        fail_time = datetime.now().timestamp()
+        error_msg = e
+    conn = st.connection('versions_db', type='sql')
+    if success_time:
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET version = :safari_version, success_check = :safari_success WHERE id = :safari_stable;"),
+                {"safari_version": version, "safari_success": success_time, "safari_stable": "safari_stable"}, )
+            s.commit()
+    elif fail_time:
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET fail_check = :safari_fail, error_message = :safari_error WHERE id = :safari_stable;"),
+                {"safari_fail": fail_time, "safari_error": error_msg, "safari_stable": "safari_stable"}, )
+            s.commit()
+    return
+
+def opi_stable_scrape():
+    url = 'https://itunes.apple.com/lookup?id=1511601750'
+    success_time = False
+    fail_time = False
+    try:
+        response = requests.get(url)
+        response_json = response.json()
+        version = response_json['results'][0]['version']
+        success_time = datetime.now().timestamp()
+    except Exception as e:
+        fail_time = datetime.now().timestamp()
+        error_msg = e
+    conn = st.connection('versions_db', type='sql')
+    if success_time:
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET version = :opi_version, success_check = :opi_success WHERE id = :opi_stable;"),
+                {"opi_version": version, "opi_success": success_time, "opi_stable": "opi_stable"}, )
+            s.commit()
+    elif fail_time:
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET fail_check = :opi_fail, error_message = :opi_error WHERE id = :opi_stable;"),
+                {"opi_fail": fail_time, "opi_error": error_msg, "opi_stable": "opi_stable"}, )
+            s.commit()
+    return
+
+def opa_stable_scrape():
+    url = 'https://play.google.com/store/apps/details?id=com.onepassword.android'
+    # response = requests.get(url)
+    # soup = BeautifulSoup(response.content, 'html.parser')
+
+    # Placeholder so that should_we_scrape functions as expected
+    conn = st.connection('versions_db', type='sql')
+    fail_time = datetime.now().timestamp()
+    error_msg = "Not checking yet"
+    with conn.session as s:
+        s.execute(text(
+            "UPDATE versions SET fail_check = :fail_time, error_message = :error_msg WHERE id = :app;"),
+            {"fail_time": fail_time, "error_msg": error_msg, "app": "opa_stable"}, )
+        s.commit()
+
+    return
+
+def opw_stable_scrape():
+    # Placeholder so that should_we_scrape functions as expected
+    conn = st.connection('versions_db', type='sql')
+    fail_time = datetime.now().timestamp()
+    error_msg = "Not checking yet"
+    with conn.session as s:
+        s.execute(text(
+            "UPDATE versions SET fail_check = :fail_time, error_message = :error_msg WHERE id = :app;"),
+            {"fail_time": fail_time, "error_msg": error_msg, "app": "opw_stable"}, )
+        s.commit()
+    return
+
 
 # chrome beta: https://chromewebstore.google.com/detail/1password-beta-%E2%80%93-password/khgocmkkpikpnmmkgmdnfckapcdkgfaf
 # chrome nightly: https://chromewebstore.google.com/detail/1password-nightly-%E2%80%93-passw/gejiddohjgogedgjnonbofjigllpkmbf
 # firefox stable: https://addons.mozilla.org/en-US/firefox/addon/1password-x-password-manager/
 # firefox beta: https://c.1password.com/dist/1P/b5x/firefox/beta/updates.json
 # firefox nightly: https://c.1password.com/dist/1P/b5x/firefox/nightly/updates.json
-# safari: https://itunes.apple.com/lookup?bundleId=%s com.1password.safari
+# safari: https://itunes.apple.com/lookup?bundleId=%scom.1password.safari
 # opi: https://itunes.apple.com/lookup?bundleId=%s com.1password.1password
-# opa:
+# opa: https://play.google.com/store/apps/details?id=com.onepassword.android
 # opw:

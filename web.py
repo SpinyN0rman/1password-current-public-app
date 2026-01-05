@@ -12,6 +12,11 @@ perform_scrape = func.should_we_scrape()
 if perform_scrape:
     func.edge_stable_api()
     func.chrome_stable_scrape()
+    func.firefox_stable_scrape()
+    func.safari_stable_scrape()
+    func.opi_stable_scrape()
+    func.opa_stable_scrape()
+    func.opw_stable_scrape()
     # Now clear Streamlit's caches
     st.cache_data.clear()
     st.cache_resource.clear()
@@ -30,10 +35,8 @@ for index, col in enumerate(cols):
         st.subheader(f"{versions_dict[index]['browser']}")
         st.caption(f"*{versions_dict[index]['channel']}*")
         st.write(f"**Version: `{versions_dict[index]['version']}`**")
-        if versions_dict[index]['success_check'] == "0":
-            st.write("*Not checking yet*")
-        else:
+        if versions_dict[index]['success_check'] != "0":
             st.write(f"{fail_indicator} *Last successful check: **{func.format_datetime(versions_dict[index]['success_check'])}***")
         if versions_dict[index]['fail_check'] > versions_dict[index]['success_check']:
-            st.write(f"*Last failed check: **{versions_dict[index]['fail_check']}** "
+            st.write(f"{fail_indicator} *Last failed check: **{func.format_datetime(versions_dict[index]['fail_check'])}** "
                      f"with error message: **{versions_dict[index]['error_message']}***")
