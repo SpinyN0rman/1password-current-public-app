@@ -5,6 +5,7 @@ st.set_page_config(layout="wide")
 
 # Initialise the database, if it doesn't already exist
 func.init_db()
+func.init_playwright()
 
 # Scrape if the last check was more than an hour ago
 perform_scrape = func.should_we_scrape()

@@ -5,6 +5,7 @@ import streamlit as st
 from sqlalchemy import text
 from pandas.core.methods.to_dict import to_dict
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+import os
 
 @st.cache_data(ttl=60)
 def init_db():
@@ -53,6 +54,18 @@ def init_db():
                WHERE NOT EXISTS (SELECT 1 FROM versions WHERE id = 'opm_stable');"""
         ))
         s.commit()
+
+def init_playwright():
+    conn = st.connection('versions_db', type='sql')
+    versions = conn.query('select * from versions')
+    versions_dict = to_dict(versions, orient='index')
+
+    for index, version in enumerate(versions_dict):
+        if versions_dict[index]['browser'] == "opa" and versions_dict[index]['version'] is None:
+            os.system("playwright install")
+            return
+
+    return
 
 # Set up our database connection
 @st.cache_data(ttl=60)
