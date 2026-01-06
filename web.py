@@ -1,5 +1,4 @@
 import streamlit as st
-from pandas.core.methods.to_dict import to_dict
 import functions as func
 
 st.set_page_config(layout="wide")

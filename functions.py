@@ -1,6 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import streamlit as st
 from sqlalchemy import text
 from pandas.core.methods.to_dict import to_dict
