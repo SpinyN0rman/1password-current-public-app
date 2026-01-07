@@ -1,11 +1,13 @@
 import streamlit as st
 import functions as func
+import os
 
 st.set_page_config(layout="wide")
 
-# Initialise the database, if it doesn't already exist
+# Initialise the database, if it doesn't already exist and set up Playwright
 func.init_db()
-func.init_playwright()
+os.system("playwright install")
+os.system('playwright install-deps')
 
 # Scrape if the last check was more than an hour ago
 perform_scrape = func.should_we_scrape()
