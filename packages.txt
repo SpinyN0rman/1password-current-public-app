@@ -28,15 +28,3 @@ libx264-dev
 libwoff1
 libmanette-0.2-0
 libgudev-1.0-0
-libgtk-4
-libgraphene-1.0
-libvpx
-libgstallocators-1.0
-libgstapp-1.0
-libgstpbutils-1.0
-libgstaudio-1.0
-libgsttag-1.0
-libgstvideo-1.0
-libgstgl-1.0
-libgstcodecparsers-1.0
-libgstfft-1.0
