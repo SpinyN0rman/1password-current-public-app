@@ -11,14 +11,16 @@ os.system("playwright install")
 # Scrape if the last check was more than an hour ago
 perform_scrape = func.should_we_scrape()
 if perform_scrape:
-    func.edge_stable_api()
+    func.edge_stable_call()
     func.chrome_stable_scrape()
-    func.firefox_stable_scrape()
-    func.safari_stable_scrape()
-    func.opi_stable_scrape()
+    func.firefox_stable_call()
+    func.safari_stable_call()
+    func.opi_stable_call()
     func.opa_stable_scrape()
-    func.opw_stable_scrape()
-    func.opm_stable_scrape()
+    func.opw_stable_call()
+    func.opm_stable_call()
+    func.opl_deb_stable_call()
+    func.opl_rpm_stable_call()
 
 # Clear Streamlit's caches
 st.cache_data.clear()

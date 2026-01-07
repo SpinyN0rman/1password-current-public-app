@@ -5,6 +5,11 @@ import streamlit as st
 from sqlalchemy import text
 from pandas.core.methods.to_dict import to_dict
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+import gzip
+import io
+from debian import debian_support
+from rpm_vercmp import vercmp
+import xml.etree.ElementTree as ET
 
 @st.cache_data(ttl=60)
 def init_db():
@@ -52,6 +57,16 @@ def init_db():
                SELECT 'opm_stable', 'desktop', 'opm', 'stable', '', '0', '0', ''
                WHERE NOT EXISTS (SELECT 1 FROM versions WHERE id = 'opm_stable');"""
         ))
+        s.execute(text(
+            """INSERT INTO versions (id, platform, browser, channel, version, success_check, fail_check, error_message)
+               SELECT 'opl_deb_stable', 'desktop', 'opl_deb', 'stable', '', '0', '0', ''
+               WHERE NOT EXISTS (SELECT 1 FROM versions WHERE id = 'opl_deb_stable');"""
+        ))
+        s.execute(text(
+            """INSERT INTO versions (id, platform, browser, channel, version, success_check, fail_check, error_message)
+               SELECT 'opl_rpm_stable', 'desktop', 'opl_rpm', 'stable', '', '0', '0', ''
+               WHERE NOT EXISTS (SELECT 1 FROM versions WHERE id = 'opl_rpm_stable');"""
+        ))
         s.commit()
 
 # Set up our database connection
@@ -90,13 +105,20 @@ def format_datetime(date_time):
     return formatted_time
 
 def format_name(name):
-    if len(name) > 3:
-        formatted_name = name.capitalize()
-    else:
-        formatted_name = name.upper()
-    return formatted_name
+    match name:
+        case 'chrome': return 'Chrome'
+        case 'edge': return 'Edge'
+        case 'firefox': return 'Firefox'
+        case 'safari': return 'Safari'
+        case 'opi': return 'iOS'
+        case 'opa': return 'Android'
+        case 'opw': return 'Windows'
+        case 'opm': return 'macOS'
+        case 'opl_deb': return 'Linux (deb)'
+        case 'opl_rpm': return 'Linux (rpm)'
+        case _: return name
 
-def edge_stable_api():
+def edge_stable_call():
     url = 'https://microsoftedge.microsoft.com/addons/getproductdetailsbycrxid/dppgmdbiimibapkepcbdbmkaabgiofem?hl=en-US'
     success_time = False
     fail_time = False
@@ -150,7 +172,7 @@ def chrome_stable_scrape():
                 s.commit()
     return
 
-def firefox_stable_scrape():
+def firefox_stable_call():
     url = 'https://addons.mozilla.org/api/v5/addons/addon/1password-x-password-manager/'
     success_time = False
     fail_time = False
@@ -178,7 +200,7 @@ def firefox_stable_scrape():
             s.commit()
     return
 
-def safari_stable_scrape():
+def safari_stable_call():
     url = 'https://itunes.apple.com/lookup?id=1569813296'
     success_time = False
     fail_time = False
@@ -205,7 +227,7 @@ def safari_stable_scrape():
             s.commit()
     return
 
-def opi_stable_scrape():
+def opi_stable_call():
     url = 'https://itunes.apple.com/lookup?id=1511601750'
     success_time = False
     fail_time = False
@@ -351,7 +373,7 @@ def opa_stable_scrape():
 
     return
 
-def opw_stable_scrape():
+def opw_stable_call():
     url = 'https://app-updates.agilebits.com/check/3/26.2.0/arm64/OPW8/en/8/ab/production/unkown'
     success_time = False
     fail_time = False
@@ -379,7 +401,7 @@ def opw_stable_scrape():
 
     return
 
-def opm_stable_scrape():
+def opm_stable_call():
     url = 'https://app-updates.agilebits.com/check/3/26.2.0/arm64/OPM8/en/8/ab/production/unkown'
     success_time = False
     fail_time = False
@@ -407,13 +429,167 @@ def opm_stable_scrape():
 
     return
 
+def opl_deb_stable_call(timeout: float = 10.0) -> str:
+    url = "https://downloads.1password.com/linux/debian/amd64/dists/stable/main/binary-amd64/Packages.gz"
 
-# chrome beta: https://chromewebstore.google.com/detail/1password-beta-%E2%80%93-password/khgocmkkpikpnmmkgmdnfckapcdkgfaf
-# chrome nightly: https://chromewebstore.google.com/detail/1password-nightly-%E2%80%93-passw/gejiddohjgogedgjnonbofjigllpkmbf
-# firefox stable: https://addons.mozilla.org/en-US/firefox/addon/1password-x-password-manager/
-# firefox beta: https://c.1password.com/dist/1P/b5x/firefox/beta/updates.json
-# firefox nightly: https://c.1password.com/dist/1P/b5x/firefox/nightly/updates.json
-# safari: https://itunes.apple.com/lookup?bundleId=%scom.1password.safari
-# opi: https://itunes.apple.com/lookup?bundleId=%s com.1password.1password
-# opa: https://play.google.com/store/apps/details?id=com.onepassword.android
-# opw:
+    request = requests.get(url, stream=True, timeout=timeout)
+    request.raise_for_status()
+
+    # Stream gzip -> text lines
+    gz = gzip.GzipFile(fileobj=request.raw)
+    gz_text = io.TextIOWrapper(gz, encoding="utf-8", errors="replace")
+
+    version = None
+    in_target = False
+
+    for line in gz_text:
+        line = line.rstrip("\n")
+
+        # Blank line = end of stanza
+        if not line:
+            in_target = False
+            continue
+
+        if line.startswith("Package:"):
+            in_target = (line.split(":", 1)[1].strip() == "1password")
+            continue
+
+        if in_target and line.startswith("Version:"):
+            v = line.split(":", 1)[1].strip()
+            if version is None or debian_support.Version(v) > debian_support.Version(version):
+                version = v
+
+    conn = st.connection('versions_db', type='sql')
+    if version:
+        success_time = datetime.now().timestamp()
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET version = :opl_version, success_check = :opl_success WHERE id = :opl_deb_stable;"),
+                {"opl_version": version, "opl_success": success_time, "opl_deb_stable": "opl_deb_stable"}, )
+            s.commit()
+    elif version is None:
+        fail_time = datetime.now().timestamp()
+        error_msg = "Package '1password' not found in Packages.gz"
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET fail_check = :opl_fail, error_message = :opl_error WHERE id = :opl_deb_stable;"),
+                {"opl_fail": fail_time, "opl_error": error_msg, "opl_deb_stable": "opl_deb_stable"}, )
+            s.commit()
+    else:
+        fail_time = datetime.now().timestamp()
+        error_msg = "Unknown error occurred"
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET fail_check = :opl_fail, error_message = :opl_error WHERE id = :opl_deb_stable;"),
+                {"opl_fail": fail_time, "opl_error": error_msg, "opl_deb_stable": "opl_deb_stable"}, )
+            s.commit()
+
+    return
+
+def opl_rpm_stable_call(
+        basearch: str = "x86_64",
+        timeout: float = 10.0,
+) -> str:
+
+    baseurl = "https://downloads.1password.com/linux/rpm/stable"
+
+    def strip_ns(tag: str) -> str:
+        return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+    def compare_evr(a, b) -> int:
+        ea, va, ra = a
+        eb, vb, rb = b
+
+        ea = int(ea or 0)
+        eb = int(eb or 0)
+        if ea != eb:
+            return -1 if ea < eb else 1
+
+        c = vercmp(va or "", vb or "")
+        if c != 0:
+            return c
+
+        return vercmp(ra or "", rb or "")
+
+    # repomd.xml
+    repomd_url = f"{baseurl}/{basearch}/repodata/repomd.xml"
+    r = requests.get(repomd_url, timeout=timeout)
+    r.raise_for_status()
+    root = ET.fromstring(r.content)
+
+    primary_href = None
+    for data in root.iter():
+        if strip_ns(data.tag) == "data" and data.attrib.get("type") == "primary":
+            for child in data.iter():
+                if strip_ns(child.tag) == "location":
+                    primary_href = child.attrib.get("href")
+                    break
+        if primary_href:
+            break
+
+    if not primary_href:
+        raise LookupError("primary metadata not found")
+
+    # primary.xml.gz
+    primary_url = f"{baseurl}/{basearch}/{primary_href}"
+    r = requests.get(primary_url, timeout=timeout)
+    r.raise_for_status()
+
+    gz = gzip.GzipFile(fileobj=io.BytesIO(r.content))
+    xml_buf = io.BytesIO(gz.read())
+
+    best_evr = None
+
+    for _, elem in ET.iterparse(xml_buf, events=("end",)):
+        if strip_ns(elem.tag) != "package":
+            continue
+
+        name = None
+        evr = None
+
+        for child in elem:
+            tag = strip_ns(child.tag)
+            if tag == "name":
+                name = (child.text or "").strip()
+            elif tag == "version":
+                evr = (
+                    child.attrib.get("epoch", "0"),
+                    child.attrib.get("ver", ""),
+                    child.attrib.get("rel", ""),
+                )
+
+        if name == "1password" and evr:
+            if best_evr is None or compare_evr(evr, best_evr) > 0:
+                best_evr = evr
+
+        elem.clear()
+
+    if best_evr is None:
+        raise LookupError("Package '1password' not found")
+
+    conn = st.connection('versions_db', type='sql')
+    if best_evr:
+        success_time = datetime.now().timestamp()
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET version = :opl_version, success_check = :opl_success WHERE id = :opl_rpm_stable;"),
+                {"opl_version": best_evr[1], "opl_success": success_time, "opl_rpm_stable": "opl_rpm_stable"}, )
+            s.commit()
+    elif best_evr is None:
+        fail_time = datetime.now().timestamp()
+        error_msg = "Package '1password' not found"
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET fail_check = :opl_fail, error_message = :opl_error WHERE id = :opl_rpm_stable;"),
+                {"opl_fail": fail_time, "opl_error": error_msg, "opl_rpm_stable": "opl_rpm_stable"}, )
+            s.commit()
+    else:
+        fail_time = datetime.now().timestamp()
+        error_msg = "Unknown error occurred"
+        with conn.session as s:
+            s.execute(text(
+                "UPDATE versions SET fail_check = :opl_fail, error_message = :opl_error WHERE id = :opl_rpm_stable;"),
+                {"opl_fail": fail_time, "opl_error": error_msg, "opl_rpm_stable": "opl_rpm_stable"}, )
+            s.commit()
+
+    return
